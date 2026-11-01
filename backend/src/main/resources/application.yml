@@ -15,3 +15,11 @@ server:
   port: 8080
 app:
   storage-path: ${APP_STORAGE_PATH:./data}
+  simulation:
+    material-delay-ms: ${SIMULATION_MATERIAL_DELAY_MS:1500}
+    generate-delay-ms: ${SIMULATION_GENERATE_DELAY_MS:5000}
+    finalize-delay-ms: ${SIMULATION_FINALIZE_DELAY_MS:1500}
+    fail-stage: ${SIMULATION_FAIL_STAGE:none}
+  executor:
+    threads: ${TASK_EXECUTOR_THREADS:2}
+    queue-capacity: ${TASK_EXECUTOR_QUEUE_CAPACITY:20}

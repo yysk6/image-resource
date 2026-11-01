@@ -2,6 +2,12 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 const base = process.env.TEST_BASE_URL || "http://frontend:3000";
+let ready = false;
+for (let i = 0; i < 120; i++) {
+  try { if ((await fetch(`${base}/api/health`)).ok) { ready = true; break; } } catch {}
+  await new Promise((resolve) => setTimeout(resolve, 250));
+}
+assert.ok(ready, "application did not become ready");
 const png = await readFile(new URL("./fixtures/sample.png", import.meta.url));
 const jpeg = await readFile(new URL("./fixtures/sample.jpg", import.meta.url));
 const catalog = await (await fetch(`${base}/api/templates`)).json();

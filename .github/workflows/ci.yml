@@ -32,5 +32,36 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-      - run: mvn -B test
-      - run: mvn -B package -DskipTests
+      - run: mvn -B -s maven-settings.xml test
+      - run: mvn -B -s maven-settings.xml package -DskipTests
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start application
+        run: docker compose -p taskci up --build -d
+      - name: Verify upload and task workflow
+        run: |
+          docker run --rm --network taskci_default -v "$PWD/tests:/tests:ro" node:22.14.0-bookworm-slim node /tests/asset-integration.mjs
+          docker run --rm --network taskci_default -v "$PWD/tests:/tests:ro" node:22.14.0-bookworm-slim node /tests/task-integration.mjs
+      - name: Start isolated failure scenarios
+        run: BACKEND_IMAGE=taskci-backend docker compose -p taskscenarios -f tests/task-scenarios-compose.yaml up -d
+      - name: Verify failure and queue saturation
+        run: docker run --rm --network taskscenarios_default -v "$PWD/tests:/tests:ro" node:22.14.0-bookworm-slim node /tests/task-scenarios.mjs
+      - name: Verify template rules and missing files
+        run: |
+          docker compose -p taskscenarios -f tests/task-scenarios-compose.yaml exec -T db mysql -uroot -ptest_root_password -e "INSERT INTO material_studio.template (id,title,category,description,cover_url,required_image_count,accepted_mime_types,max_file_size_bytes,sort_order) VALUES ('test-type','test','test','test','/covers/postcard.svg',1,'image/jpeg',5242880,90), ('test-size','test','test','test','/covers/postcard.svg',1,'image/png',1,91);"
+          asset_id=$(docker run --rm --network taskscenarios_default -v "$PWD/tests:/tests:ro" node:22.14.0-bookworm-slim node /tests/task-constraints.mjs setup)
+          case "$asset_id" in *[!0-9a-f-]*|'') exit 1;; esac
+          docker run --rm --network taskscenarios_default -v "$PWD/tests:/tests:ro" node:22.14.0-bookworm-slim node /tests/task-constraints.mjs rules "$asset_id"
+          docker compose -p taskscenarios -f tests/task-scenarios-compose.yaml exec -T saturated rm "/app/data/$asset_id.png"
+          docker run --rm --network taskscenarios_default -v "$PWD/tests:/tests:ro" node:22.14.0-bookworm-slim node /tests/task-constraints.mjs missing "$asset_id"
+      - name: Inject rejection write failure in isolated database
+        run: docker compose -p taskscenarios -f tests/task-scenarios-compose.yaml exec -T db mysql -uroot -ptest_root_password -e "USE material_studio; CREATE TRIGGER reject_failed_status BEFORE UPDATE ON creation_task FOR EACH ROW SET NEW.status = IF(NEW.status = 'FAILED', NULL, NEW.status);"
+      - name: Verify rejection write failure is reported
+        run: docker run --rm --network taskscenarios_default -v "$PWD/tests:/tests:ro" node:22.14.0-bookworm-slim node /tests/task-rejection-write-failure.mjs
+      - name: Stop test containers
+        if: always()
+        run: |
+          BACKEND_IMAGE=taskci-backend docker compose -p taskscenarios -f tests/task-scenarios-compose.yaml down
+          docker compose -p taskci down

@@ -1,0 +1,61 @@
+# Disposable failure and queue-saturation environment. Build work-backend first.
+x-backend: &backend
+  image: ${BACKEND_IMAGE:-work-backend}
+  depends_on:
+    db:
+      condition: service_healthy
+  tmpfs:
+    - /app/data
+x-env: &env
+  SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/material_studio?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
+  SPRING_DATASOURCE_USERNAME: test_user
+  SPRING_DATASOURCE_PASSWORD: test_password
+  APP_STORAGE_PATH: /app/data
+  SIMULATION_MATERIAL_DELAY_MS: 500
+  SIMULATION_GENERATE_DELAY_MS: 500
+  SIMULATION_FINALIZE_DELAY_MS: 500
+services:
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: material_studio
+      MYSQL_USER: test_user
+      MYSQL_PASSWORD: test_password
+      MYSQL_ROOT_PASSWORD: test_root_password
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+  fail-material:
+    <<: *backend
+    environment:
+      <<: *env
+      SIMULATION_FAIL_STAGE: material-check
+  fail-generate:
+    <<: *backend
+    environment:
+      <<: *env
+      SIMULATION_FAIL_STAGE: generate
+  fail-finalize:
+    <<: *backend
+    environment:
+      <<: *env
+      SIMULATION_FAIL_STAGE: finalize
+  saturated:
+    <<: *backend
+    environment:
+      <<: *env
+      SIMULATION_MATERIAL_DELAY_MS: 5000
+      TASK_EXECUTOR_THREADS: 1
+      TASK_EXECUTOR_QUEUE_CAPACITY: 1
+  reject-write-failure:
+    <<: *backend
+    environment:
+      <<: *env
+      SIMULATION_MATERIAL_DELAY_MS: 5000
+      TASK_EXECUTOR_THREADS: 1
+      TASK_EXECUTOR_QUEUE_CAPACITY: 1
