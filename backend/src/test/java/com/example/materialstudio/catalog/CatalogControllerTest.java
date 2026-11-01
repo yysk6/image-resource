@@ -25,6 +25,10 @@ class CatalogControllerTest {
     @Test void returns404ForMissingTemplate() throws Exception {
         mvc.perform(get("/api/templates/missing")).andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("NOT_FOUND"));
     }
+    @Test void returnsExistingTemplateDetails() throws Exception {
+        when(mapper.template("one")).thenReturn(new CatalogMapper.TemplateRow("one", "日记", "生活记录", "描述", "/covers/journal.svg", 1, "image/jpeg,image/png", 5242880));
+        mvc.perform(get("/api/templates/one")).andExpect(status().isOk()).andExpect(jsonPath("$.coverUrl").value("/covers/journal.svg"));
+    }
     @Test void identityRejectsInvalidAndAcceptsKnownUser() throws Exception {
         when(mapper.user("demo-a")).thenReturn(new CatalogMapper.DemoUser("demo-a", "演示用户 A"));
         mvc.perform(get("/api/me")).andExpect(status().isUnauthorized());

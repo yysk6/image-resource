@@ -21,3 +21,10 @@ test("shows a retry when templates cannot load", async () => {
   expect(await screen.findByText(/模板暂时加载不了/)).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
 });
+test("offers a retry when the user list is empty", async () => {
+  const fetchMock = vi.fn(async (url: string) => ({ ok: true, json: async () => url === "/api/users" && fetchMock.mock.calls.filter(([path]) => path === "/api/users").length > 1 ? [{ id: "demo-a", displayName: "演示用户 A" }] : [] }));
+  vi.stubGlobal("fetch", fetchMock);
+  render(<Providers><Home /></Providers>);
+  fireEvent.click(await screen.findByRole("button", { name: "暂无演示用户，重新加载" }));
+  await waitFor(() => expect(screen.getByLabelText("切换演示用户")).toHaveValue("demo-a"));
+});

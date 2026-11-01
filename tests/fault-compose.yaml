@@ -1,0 +1,39 @@
+# Isolated, disposable environment for stage 2 fault checks. Build work-backend first.
+services:
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: material_studio
+      MYSQL_USER: test_user
+      MYSQL_PASSWORD: test_password
+      MYSQL_ROOT_PASSWORD: test_root_password
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+  storage-fault:
+    image: work-backend
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/material_studio?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
+      SPRING_DATASOURCE_USERNAME: test_user
+      SPRING_DATASOURCE_PASSWORD: test_password
+      APP_STORAGE_PATH: /proc/not-writable
+    depends_on:
+      db:
+        condition: service_healthy
+  db-fault:
+    image: work-backend
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/material_studio?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
+      SPRING_DATASOURCE_USERNAME: test_user
+      SPRING_DATASOURCE_PASSWORD: test_password
+      APP_STORAGE_PATH: /app/test-data
+    tmpfs:
+      - /app/test-data
+    depends_on:
+      db:
+        condition: service_healthy
