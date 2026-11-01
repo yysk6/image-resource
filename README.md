@@ -1,6 +1,6 @@
 # 素材制作网站
 
-当前已实现阶段 3：支持演示用户切换、模板浏览、图片上传和模拟异步制作。历史记录和刷新后恢复将在阶段 4 实现。具体需求与开发阶段分别见 [项目规格](docs/SPEC.md) 和 [开发计划](docs/PLAN.md)。
+当前已实现阶段 4：支持演示用户切换、模板浏览、图片上传、模拟异步制作和个人作品历史。具体需求与开发阶段分别见 [项目规格](docs/SPEC.md) 和 [开发计划](docs/PLAN.md)。
 
 ## 技术与目录
 
@@ -52,7 +52,7 @@ docker run --rm -v "${PWD}/backend:/app" -w /app maven:3.9.9-eclipse-temurin-21 
 
 Flyway V2 初始化两个演示用户和四个模板，包含两个分类、单图及多图要求。四张 SVG 封面由本项目原创绘制，保存在 `frontend/public/covers/`，可离线访问。首页可筛选分类并进入详情查看素材规则。
 
-用户选择保存在浏览器本地，相关请求使用 `X-Demo-User`；后端在个人业务接口检查用户是否存在。可通过右上角切换演示用户 A、B，并通过 `GET /api/me` 验证当前身份。这个请求头可以伪造，只用于演示，不是真实认证，不能用于生产安全隔离。个人任务功能尚未实现。
+用户选择保存在浏览器本地，相关请求使用 `X-Demo-User`；后端在个人业务接口检查用户是否存在。可通过右上角切换演示用户 A、B，并通过 `GET /api/me` 验证当前身份。这个请求头可以伪造，只用于演示，不是真实认证，不能用于生产安全隔离。
 
 已实现接口：`GET /api/users` 返回用户数组；`GET /api/categories` 返回分类字符串数组；`GET /api/templates?category=生活记录` 返回模板数组；`GET /api/templates/{id}` 返回详情，不存在时返回 404；`GET /api/me` 需携带有效 `X-Demo-User`，无效时返回 401。模板包含 `id`、`title`、`category`、`description`、`coverUrl`、`requiredImageCount`、`acceptedMimeTypes` 和 `maxFileSizeBytes`；错误体包含 `code` 和 `message`。
 
@@ -64,9 +64,11 @@ Flyway V2 初始化两个演示用户和四个模板，包含两个分类、单�
 
 `GET /api/tasks/{id}` 按当前用户读取任务：返回 `id`、`templateId`、`templateTitle`、`status`、`currentStage`、`resultUrl`、`failureReason` 以及 `createdAt`、`startedAt`、`finishedAt`（UTC ISO 8601）。状态依次为 `PENDING`、`RUNNING`、`SUCCEEDED` 或 `FAILED`；处理阶段依次为 `MATERIAL_CHECK`（素材检查）、`GENERATING`（模拟生成）和 `FINALIZING`（结果整理）。成功结果使用模板封面作为可访问的模拟结果，不调用 AI。任务查询只读取数据库；每个任务在详情页单独轮询，终态后停止；查询失败保留已知状态并可手动重新查询。
 
+`GET /api/tasks` 返回当前演示用户的全部任务，按创建时间倒序、ID 倒序排列；没有分页。导航中的“我的作品”从服务端读取历史，并独立跟踪未完成任务，刷新或重新进入页面后可恢复；查询出错时保留已知状态并可重试。切换用户会清理前一个用户的私有查询。
+
 本地演示：复制 `.env.example` 为 `.env`，修改 `SIMULATION_MATERIAL_DELAY_MS`、`SIMULATION_GENERATE_DELAY_MS`、`SIMULATION_FINALIZE_DELAY_MS`（毫秒）控制每步耗时；`SIMULATION_FAIL_STAGE` 可设置为 `none`、`material-check`、`generate` 或 `finalize`。修改配置后执行 `docker compose up -d backend` 重建该容器，再提交新任务；这些配置作用于服务端，不需修改模板。`TASK_EXECUTOR_THREADS` 和 `TASK_EXECUTOR_QUEUE_CAPACITY` 分别设置工作线程数及有界队列容量。
 
-任务记录在事务提交后交给 Java 内存线程池，浏览器关闭不会取消任务。服务进程崩溃或重启时未完成任务可能停留在 `PENDING` 或 `RUNNING`，当前不自动恢复；如果数据库持续不可用，失败状态也可能无法保存，日志会记录任务 ID 以便排查。可按任务 ID 查询数据库中的状态并人工排查，必要时由管理员备份后处理。提交请求超时后重试可能产生重复任务，本阶段未实现幂等；刷新或离开详情页后，当前页面中的任务卡片不会恢复，个人历史查询将在阶段 4 实现。
+任务记录在事务提交后交给 Java 内存线程池，浏览器关闭不会取消任务。服务进程崩溃或重启时未完成任务可能停留在 `PENDING` 或 `RUNNING`，当前不自动恢复；如果数据库持续不可用，失败状态也可能无法保存，日志会记录任务 ID 以便排查。可按任务 ID 查询数据库中的状态并人工排查，必要时由管理员备份后处理。提交请求超时后重试可能产生重复任务，本阶段未实现幂等；刷新或离开详情页后，详情页中的任务卡片不会恢复，可在“我的作品”中查看历史。
 
 阶段 3 的成功路径测试可在独立 Compose 环境启动后运行 `tests/task-integration.mjs`，失败阶段和队列饱和测试使用 `tests/task-scenarios-compose.yaml` 与 `tests/task-scenarios.mjs`；具体 Docker 命令见 [阶段 3 文档](docs/stages/03-tasks.md)。这些集成测试会写入演示数据，请在独立测试环境运行。
 
@@ -93,5 +95,6 @@ docker compose -p assetfault -f tests/fault-compose.yaml down
 - 阶段 0 的容器检查及 GitHub Actions 已通过。
 - 阶段 1 的容器构建、后端测试、前端 lint、类型检查及测试通过；真实 MySQL 的迁移、用户、分类、模板、详情、身份和本地封面接口已验证。桌面与 500 像素宽屏幕已通过截图检查；由于浏览器控制工具初始化失败，完整键盘交互尚未手动验证。lint 有 4 条本地 SVG 使用 `img` 的性能提示，不影响通过。
 - 阶段 2 真实容器集成测试已验证 JPEG、PNG、无效图片、伪造类型、空文件、超大文件、用户隔离及后端重启后图片读取；独立环境的文件写入与数据库写入失败测试均返回预期错误，数据库写入失败后未留下临时文件。最终前端容器中 lint、类型检查及 13 项测试通过；lint 包含 5 条图片标签性能提示。
-- 阶段 3 已实现任务受理和三步模拟执行；Java 容器构建及测试、前端容器 lint、类型检查和 16 项测试通过，lint 有 6 条图片标签性能提示。真实数据库的成功、三个阶段失败、队列满载、拒绝状态写入失败与素材校验已在容器中验证。历史列表、刷新恢复及失败重试尚未实现，完整键盘手测尚未执行。`X-Demo-User` 可伪造，不能当作生产环境的认证机制。
+- 阶段 3 已实现任务受理和三步模拟执行；Java 容器构建及测试、前端容器 lint、类型检查和 16 项测试通过，lint 有 6 条图片标签性能提示。真实数据库的成功、三个阶段失败、队列满载、拒绝状态写入失败与素材校验已在容器中验证。
+- 阶段 4 提供个人历史和刷新恢复。真实 MySQL 测试覆盖用户隔离和排序；浏览器检查了用户切换及刷新恢复，自动化测试覆盖多任务、查询失败恢复、终态停止和请求取消。完整键盘、断网及多任务浏览器手工验收尚未执行。`X-Demo-User` 可伪造，不能当作生产环境的认证机制。
 - 使用了 AI 辅助拆解任务与编写代码；实际验证和修正记录随开发进展补充。

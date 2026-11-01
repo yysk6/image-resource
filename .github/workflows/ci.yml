@@ -44,6 +44,7 @@ jobs:
         run: |
           docker run --rm --network taskci_default -v "$PWD/tests:/tests:ro" node:22.14.0-bookworm-slim node /tests/asset-integration.mjs
           docker run --rm --network taskci_default -v "$PWD/tests:/tests:ro" node:22.14.0-bookworm-slim node /tests/task-integration.mjs
+          docker run --rm --network taskci_default -v "$PWD/tests:/tests:ro" node:22.14.0-bookworm-slim node /tests/history-integration.mjs
       - name: Start isolated failure scenarios
         run: BACKEND_IMAGE=taskci-backend docker compose -p taskscenarios -f tests/task-scenarios-compose.yaml up -d
       - name: Verify failure and queue saturation

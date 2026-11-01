@@ -64,6 +64,15 @@ public class TaskController {
     public TaskResponse get(@PathVariable String id, HttpServletRequest request) {
         var task = tasks.findOwned(id, user(request));
         if (task == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "任务不存在");
+        return response(task);
+    }
+    @GetMapping
+    public List<TaskResponse> history(HttpServletRequest request) {
+        String userId = user(request);
+        try { return tasks.findAllOwned(userId).stream().map(TaskController::response).toList(); }
+        catch (RuntimeException error) { log.error("Could not read task history for user {}", userId, error); throw error; }
+    }
+    private static TaskResponse response(TaskMapper.Task task) {
         return new TaskResponse(task.id(), task.templateId(), task.templateTitle(), task.status(), task.currentStage(), task.resultUrl(), task.failureReason(),
                 task.createdAt().atOffset(ZoneOffset.UTC).toString(), task.startedAt() == null ? null : task.startedAt().atOffset(ZoneOffset.UTC).toString(), task.finishedAt() == null ? null : task.finishedAt().atOffset(ZoneOffset.UTC).toString());
     }

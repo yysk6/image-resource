@@ -14,6 +14,8 @@ public interface TaskMapper {
     void link(@Param("taskId") String taskId, @Param("assetId") String assetId, @Param("position") int position);
     @Select("SELECT t.id,t.user_id,t.template_id,p.title,t.status,t.current_stage,t.result_url,t.failure_reason,t.created_at,t.started_at,t.finished_at FROM creation_task t JOIN template p ON p.id=t.template_id WHERE t.id=#{id} AND t.user_id=#{userId}")
     Task findOwned(@Param("id") String id, @Param("userId") String userId);
+    @Select("SELECT t.id,t.user_id,t.template_id,p.title,t.status,t.current_stage,t.result_url,t.failure_reason,t.created_at,t.started_at,t.finished_at FROM creation_task t JOIN template p ON p.id=t.template_id WHERE t.user_id=#{userId} ORDER BY t.created_at DESC,t.id DESC")
+    List<Task> findAllOwned(@Param("userId") String userId);
     @Select("SELECT asset_id FROM task_asset WHERE task_id=#{id} ORDER BY position")
     List<String> assetIds(@Param("id") String id);
     @Update("UPDATE creation_task SET status='RUNNING',started_at=UTC_TIMESTAMP(3),updated_at=UTC_TIMESTAMP(3) WHERE id=#{id} AND status='PENDING'")
