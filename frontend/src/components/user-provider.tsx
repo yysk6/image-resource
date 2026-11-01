@@ -10,7 +10,24 @@ function IdentityProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const [userId, setUser] = useState("");
   const users = useQuery({ queryKey: ["users"], queryFn: ({ signal }) => api<DemoUser[]>("/users", { signal }) });
-  useEffect(() => { if (!users.data?.length) return; const saved = localStorage.getItem("demo-user"); setUser(users.data.some((user) => user.id === saved) ? saved! : users.data[0].id); }, [users.data]);
+  useEffect(() => {
+    if (!users.data) return;
+    if (!users.data.length) {
+      if (userId) {
+        void queryClient.cancelQueries({ predicate: (query) => query.queryKey[0] === "private" });
+        queryClient.removeQueries({ predicate: (query) => query.queryKey[0] === "private" });
+        setUser("");
+      }
+      return;
+    }
+    const saved = localStorage.getItem("demo-user");
+    const next = users.data.some((user) => user.id === saved) ? saved! : users.data[0].id;
+    if (next !== userId) {
+      void queryClient.cancelQueries({ predicate: (query) => query.queryKey[0] === "private" });
+      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] === "private" });
+      setUser(next);
+    }
+  }, [users.data, queryClient, userId]);
   function setUserId(id: string) {
     if (id === userId) return;
     void queryClient.cancelQueries({ predicate: (query) => query.queryKey[0] === "private" });
