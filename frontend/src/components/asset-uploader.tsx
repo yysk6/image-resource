@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useIdentity } from "@/components/user-provider";
 import type { Template } from "@/lib/api";
 import { api } from "@/lib/api";
@@ -25,6 +25,7 @@ function TaskCard({ id, userId }: { id: string; userId: string }) {
 }
 
 function UploadSlots({ template, userId }: { template: Template; userId: string }) {
+  const uploadId = useId();
   const [slots, setSlots] = useState<Slot[]>(() => Array.from({ length: template.requiredImageCount }, empty));
   const slotsRef = useRef(slots);
   const requests = useRef<(AbortController | undefined)[]>([]);
@@ -94,8 +95,8 @@ function UploadSlots({ template, userId }: { template: Template; userId: string 
     <div className="upload-heading"><div><h2 id="upload-heading">上传照片</h2><p>选择 {template.requiredImageCount} 张照片，支持 JPEG、PNG。</p></div><span>{slots.filter((slot) => slot.status === "ready").length} / {template.requiredImageCount}</span></div>
     {!userId && <p className="upload-hint" role="status">请选择演示用户后上传。</p>}
     <div className="upload-grid">{slots.map((slot, index) => <div className="upload-slot" key={index}>
-      {slot.preview ? <img src={slot.preview} alt={`第 ${index + 1} 张照片预览`} /> : <div className="upload-placeholder" aria-hidden="true"><span>＋</span><small>照片 {index + 1}</small></div>}
-      <label className="upload-choose">{slot.file ? "更换" : "选择图片"}<input type="file" accept={template.acceptedMimeTypes.join(",")} disabled={!userId} aria-label={`${slot.file ? "更换" : "选择"}第 ${index + 1} 张图片`} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void choose(index, file); }} /></label>
+      {slot.preview ? <img src={slot.preview} alt={`第 ${index + 1} 张照片预览`} /> : <label htmlFor={`${uploadId}-${index}`} className={`upload-placeholder${userId ? " upload-placeholder-active" : ""}`} aria-hidden="true"><span>＋</span><small>照片 {index + 1}</small></label>}
+      <label className="upload-choose">{slot.file ? "更换" : "选择图片"}<input id={`${uploadId}-${index}`} type="file" accept={template.acceptedMimeTypes.join(",")} disabled={!userId} aria-label={`${slot.file ? "更换" : "选择"}第 ${index + 1} 张图片`} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void choose(index, file); }} /></label>
       {slot.file && <button type="button" className="upload-remove" onClick={() => remove(index)} aria-label={`移除第 ${index + 1} 张图片`}>移除</button>}
       <div className="upload-status" aria-live="polite">{slot.status === "uploading" ? "上传中…" : slot.status === "ready" ? "上传完成" : slot.status === "error" ? <><span>{slot.error}</span>{slot.file && <button type="button" onClick={() => void choose(index, slot.file!)}>重试</button>}</> : "等待选择"}</div>
     </div>)}</div>
