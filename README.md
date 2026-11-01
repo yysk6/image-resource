@@ -80,19 +80,39 @@ Flyway V2 初始化两个演示用户和四个模板，包含两个分类、单�
 
 本项目的 Compose 是本地演示配置，不是生产安全配置。升级前记录源码 commit、前后端镜像 ID（`docker compose images`）、配置和迁移版本；先停止接收新任务并等待任务结束，备份 MySQL 的一致性逻辑导出以及 `asset_data` 文件卷，妥善保管备份并避免提交凭据和用户图片。数据库和素材应在同一维护窗口备份，以免记录与文件不一致。先在独立副本恢复备份并验证可读性。
 
-例如在 POSIX shell 中，停止上传及任务写入并等待现有任务完成后，可将备份写到仓库之外（备份含用户数据，应限制访问）：
+例如在 POSIX shell 中，停止上传及任务写入并等待现有任务完成后，可将备份写到仓库之外。以下命令要求目标目录尚不存在，并以仅当前用户可访问的权限创建目录和文件；备份含用户数据，需妥善保管：
 
 ```sh
-mkdir -p ../material-studio-backup
+(set -e
+umask 077
+mkdir -m 700 ../material-studio-backup
 git rev-parse HEAD > ../material-studio-backup/commit.txt
 docker compose images > ../material-studio-backup/images.txt
+docker inspect "$(docker compose ps -q backend)" --format '{{.Image}}' > ../material-studio-backup/backend-image.txt
+docker inspect "$(docker compose ps -q frontend)" --format '{{.Image}}' > ../material-studio-backup/frontend-image.txt
 docker compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump -uroot --single-transaction --no-tablespaces "$MYSQL_DATABASE"' > ../material-studio-backup/database.sql
 docker compose exec -T backend tar -C /app/data -czf - . > ../material-studio-backup/assets.tar.gz
+)
 ```
 
 检查每条命令退出状态及备份文件是否可读；MySQL 导出也包括 Flyway 迁移记录。备份和恢复命令未在本次验收中执行，实际部署应先用独立副本验证。
 
-部署时在目标环境检出确定的 commit，检查配置及端口，执行 `docker compose up --build -d`；检查 `/api/health`、模板封面、上传及一个完整任务。故障时先停止新写入，检查后端日志中的任务 ID 和阶段；根据备份、Flyway 迁移与旧版本的兼容性，决定恢复旧镜像还是同时恢复数据库及素材的配套备份。数据库迁移可能不可逆，单独回滚镜像不能撤销数据库变化。恢复操作先在独立副本演练，避免覆盖现有数据。本次没有执行生产部署或备份恢复演练。
+部署时在目标环境检出确定的 commit，检查配置及端口，执行 `docker compose up --build -d`；检查 `/api/health`、模板封面、上传及一个完整任务。故障时先停止新写入，检查后端日志中的任务 ID 和阶段；根据备份、Flyway 迁移与旧版本的兼容性，决定恢复旧镜像还是同时恢复数据库及素材的配套备份。数据库迁移可能不可逆，单独回滚镜像不能撤销数据库变化。
+
+确认旧镜像仍保存在本机且数据库结构与旧版本兼容后，可在 POSIX shell 中生成仓库外的临时覆盖配置，并使用已保存的完整镜像 ID 启动；不要执行 `--build`：
+
+```sh
+cat > ../material-studio-backup/rollback.yaml <<EOF
+services:
+  backend:
+    image: $(cat ../material-studio-backup/backend-image.txt)
+  frontend:
+    image: $(cat ../material-studio-backup/frontend-image.txt)
+EOF
+docker compose -f compose.yaml -f ../material-studio-backup/rollback.yaml up -d --no-build
+```
+
+随后重新检查健康接口、模板和历史。若结构不兼容，须先在隔离副本核验并按维护方案一起恢复数据库及同一时间点的素材备份，不能直接覆盖现有数据。本次在隔离环境验证了指定现有镜像 ID 启动，但未执行生产部署或数据库及素材备份恢复演练。
 
 ## 来源、AI 使用与投入
 
