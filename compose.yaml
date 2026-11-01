@@ -1,0 +1,44 @@
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-material_studio}
+      MYSQL_USER: ${MYSQL_USER:-material_app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-local_demo_password}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-local_root_password}
+      TZ: UTC
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci", "--default-time-zone=+00:00"]
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+  backend:
+    build: ./backend
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-material_studio}?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-material_app}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-local_demo_password}
+      APP_STORAGE_PATH: /app/data
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - asset_data:/app/data
+    ports:
+      - "8080:8080"
+  frontend:
+    build: ./frontend
+    environment:
+      BACKEND_URL: http://backend:8080
+      HOSTNAME: 0.0.0.0
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+volumes:
+  mysql_data:
+  asset_data:

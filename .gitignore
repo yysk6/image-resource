@@ -1,0 +1,11 @@
+.env
+**/node_modules/
+**/.next/
+**/target/
+**/coverage/
+**/*.log
+.idea/
+.vscode/
+data/
+.m2-repository/
+*.tsbuildinfo
