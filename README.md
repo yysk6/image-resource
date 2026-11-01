@@ -1,6 +1,6 @@
 # 素材制作网站
 
-当前已实现阶段 4：支持演示用户切换、模板浏览、图片上传、模拟异步制作和个人作品历史。具体需求与开发阶段分别见 [项目规格](docs/SPEC.md) 和 [开发计划](docs/PLAN.md)。
+已实现模板浏览、演示用户切换、图片上传、模拟异步制作和个人作品历史；不接入真实 AI。验收的应用代码基线为 `264e1ae`，阶段 5 的交付文档和检查结果以本仓库最新提交为准。具体需求与开发阶段分别见 [项目规格](docs/SPEC.md)、[开发计划](docs/PLAN.md) 和 [阶段 5 验收记录](docs/stages/05-delivery.md)。
 
 ## 技术与目录
 
@@ -35,15 +35,15 @@ npm test
 npm run build
 
 # backend 目录
-mvn -B test
-mvn -B package
+mvn -B -s maven-settings.xml test
+mvn -B -s maven-settings.xml package -DskipTests
 ```
 
 在项目根目录的 POSIX shell 可使用下列构建容器运行检查；PowerShell 中将 `${PWD}` 改为 `$($PWD.Path)`：
 
 ```sh
 docker run --rm -v "${PWD}/frontend:/app" -w /app node:22.14.0-bookworm-slim sh -c "npm ci && npm run lint && npm run typecheck && npm test && npm run build"
-docker run --rm -v "${PWD}/backend:/app" -w /app maven:3.9.9-eclipse-temurin-21 mvn -B verify
+docker run --rm -v "${PWD}/backend:/app" -w /app maven:3.9.9-eclipse-temurin-21 mvn -B -s maven-settings.xml verify
 ```
 
 这些命令会在挂载的项目目录生成依赖和构建文件；前端使用 `npm ci` 和锁文件。路径含空格时保留引号。
@@ -71,6 +71,36 @@ Flyway V2 初始化两个演示用户和四个模板，包含两个分类、单�
 任务记录在事务提交后交给 Java 内存线程池，浏览器关闭不会取消任务。服务进程崩溃或重启时未完成任务可能停留在 `PENDING` 或 `RUNNING`，当前不自动恢复；如果数据库持续不可用，失败状态也可能无法保存，日志会记录任务 ID 以便排查。可按任务 ID 查询数据库中的状态并人工排查，必要时由管理员备份后处理。提交请求超时后重试可能产生重复任务，本阶段未实现幂等；刷新或离开详情页后，详情页中的任务卡片不会恢复，可在“我的作品”中查看历史。
 
 阶段 3 的成功路径测试可在独立 Compose 环境启动后运行 `tests/task-integration.mjs`，失败阶段和队列饱和测试使用 `tests/task-scenarios-compose.yaml` 与 `tests/task-scenarios.mjs`；具体 Docker 命令见 [阶段 3 文档](docs/stages/03-tasks.md)。这些集成测试会写入演示数据，请在独立测试环境运行。
+
+操作演示：选择任一模板并上传要求数量的图片，点击“开始制作”；提交结束后可再次点击创建另一任务。进入“我的作品”，刷新页面查看后端历史及未完成任务；切换演示用户查看各自记录。模拟查询异常时，可在浏览器开发者工具临时阻断对应的任务查询，恢复网络后点击“重新查询”。如需演示每一步失败，将 `SIMULATION_FAIL_STAGE` 分别设置为 `material-check`、`generate`、`finalize`，每次重建后端并提交新任务；恢复成功场景时设置为 `none`。需要观察阶段时可适当增加对应延迟。
+
+接口常见错误：无效身份返回 401，参数或素材不符合要求返回 400，素材超出限制返回 413，不存在或不属于当前用户的素材、任务返回 404，队列满返回 503。已处理的错误使用 `code`、`message`；不可预期的服务异常可能返回框架默认错误体。图片结果可在页面预览，未实现下载、删除或失败任务自动重试。
+
+## 备份、部署与回滚
+
+本项目的 Compose 是本地演示配置，不是生产安全配置。升级前记录源码 commit、前后端镜像 ID（`docker compose images`）、配置和迁移版本；先停止接收新任务并等待任务结束，备份 MySQL 的一致性逻辑导出以及 `asset_data` 文件卷，妥善保管备份并避免提交凭据和用户图片。数据库和素材应在同一维护窗口备份，以免记录与文件不一致。先在独立副本恢复备份并验证可读性。
+
+例如在 POSIX shell 中，停止上传及任务写入并等待现有任务完成后，可将备份写到仓库之外（备份含用户数据，应限制访问）：
+
+```sh
+mkdir -p ../material-studio-backup
+git rev-parse HEAD > ../material-studio-backup/commit.txt
+docker compose images > ../material-studio-backup/images.txt
+docker compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump -uroot --single-transaction --no-tablespaces "$MYSQL_DATABASE"' > ../material-studio-backup/database.sql
+docker compose exec -T backend tar -C /app/data -czf - . > ../material-studio-backup/assets.tar.gz
+```
+
+检查每条命令退出状态及备份文件是否可读；MySQL 导出也包括 Flyway 迁移记录。备份和恢复命令未在本次验收中执行，实际部署应先用独立副本验证。
+
+部署时在目标环境检出确定的 commit，检查配置及端口，执行 `docker compose up --build -d`；检查 `/api/health`、模板封面、上传及一个完整任务。故障时先停止新写入，检查后端日志中的任务 ID 和阶段；根据备份、Flyway 迁移与旧版本的兼容性，决定恢复旧镜像还是同时恢复数据库及素材的配套备份。数据库迁移可能不可逆，单独回滚镜像不能撤销数据库变化。恢复操作先在独立副本演练，避免覆盖现有数据。本次没有执行生产部署或备份恢复演练。
+
+## 来源、AI 使用与投入
+
+模板 SVG 是项目内制作的本地示例，结果引用这些封面；用户图片来自用户上传，`tests/fixtures/` 中的图片仅用于测试。前端基于 Next.js/React，后端基于 Spring Boot/MyBatis，依赖来源和版本由各自清单及 npm 锁文件记录；项目业务代码和迁移由本项目实现。
+
+本项目使用 Codex 辅助：先将原题拆解为规格和阶段文档，再结合相关源码生成或修改实现；通过容器测试、浏览器检查及两条代码审查线验证并修正。例如阶段 3 审查发现任务启动写入失败可能留下等待状态，随后使用临时 MySQL 故障注入复现、修复和回归。AI 生成内容经过运行检查，但不代表已覆盖所有手工场景。
+
+开发全过程没有持续记录实际人力投入，无法准确报告工时；Git 提交时间只能反映提交时间，不等同于工作时长。
 
 真实数据库与文件集成测试针对独立测试环境运行，会写入演示素材且不自动清理。在 Compose 已启动、默认网络名称为 `work_default` 时，可执行 `docker run --rm --network work_default -v "${PWD}/tests:/tests:ro" node:22.14.0-bookworm-slim node /tests/asset-integration.mjs`；PowerShell 把 `${PWD}` 改为 `$($PWD.Path)`，Compose 项目名称不同时调整网络名称。
 

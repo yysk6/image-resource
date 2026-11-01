@@ -1,6 +1,6 @@
 # 阶段 5：测试、容器验收与交付
 
-状态：待实施。前置条件：阶段 0–4 的功能及阶段验证完成，或明确记录尚未完成的项目。以 [总计划验收矩阵](../PLAN.md) 和 [规格第 7 节](../SPEC.md) 为依据。
+状态：验收和文档整理完成，代码审查进行中。前置条件：阶段 0–4 的功能及阶段验证完成，或明确记录尚未完成的项目。以 [总计划验收矩阵](../PLAN.md) 和 [规格第 7 节](../SPEC.md) 为依据。
 
 ## 1. 测试与质量检查
 
@@ -35,9 +35,38 @@ README 至少包含：
 
 ## 5. 最终交付检查
 
-- [ ] 前后端源码、依赖版本/锁文件、数据库迁移与初始化数据齐全。
-- [ ] Dockerfile、Compose、非敏感配置、CI 和本地可用示例素材齐全。
-- [ ] A01–A09 与手工验收有实际证据；失败及未验证项明确记录。
-- [ ] README 的版本、命令、接口、演示步骤、限制和实际状态一致。
-- [ ] 源码交付注明验收 commit；压缩包不包含凭据、构建缓存和依赖目录。
-- [ ] 最终报告说明完成内容、实际检查结果、未完成项与已知风险。
+- [x] 前后端源码、依赖版本/锁文件、数据库迁移与初始化数据齐全。
+- [x] Dockerfile、Compose、非敏感配置、CI 和本地可用示例素材齐全。
+- [x] A01–A09 与手工验收有实际证据；失败及未验证项明确记录。
+- [x] README 的版本、命令、接口、演示步骤、限制和实际状态一致。
+- [x] 源码交付注明验收代码基线；本次不提供压缩包。
+- [x] 记录完成内容、实际检查结果、未完成项与已知风险。
+
+## 6. 2026-11-01 验收记录
+
+应用代码验收基线：`264e1ae`。在 Docker Compose v5.1.0 中使用新项目 `stage5accept` 及独立的 MySQL/素材卷；宿主机端口 13000、18080，MySQL 不暴露端口。以下命令从仓库根目录运行；PowerShell 的挂载路径请改用 `$($PWD.Path)`。覆盖文件使用 `!override`，需要 Compose 2.24.4 或更高版本。
+
+```sh
+docker compose -p stage5accept -f compose.yaml -f tests/acceptance-compose.yaml config --quiet
+docker compose -p stage5accept -f compose.yaml -f tests/acceptance-compose.yaml up --build -d
+docker run --rm --network stage5accept_default -v "$PWD/tests:/tests:ro" node:22.14.0-bookworm-slim sh -c 'node /tests/asset-integration.mjs && node /tests/task-integration.mjs && node /tests/history-integration.mjs'
+docker build --target build -t stage5-frontend-check ./frontend
+docker run --rm stage5-frontend-check sh -c 'npm run lint && npm run typecheck && npm test'
+docker build --no-cache --target build -t stage5-backend-check ./backend
+```
+
+结果：Compose 配置和干净数据库初始化成功，前端构建、lint、类型检查和 22 项测试通过；lint 有 7 条图片标签性能提示。素材、成功任务和历史接口测试通过；重启隔离 MySQL、前端和后端后，已完成任务与上传图片仍可读取且图片内容一致。Java 无缓存构建及 5 项测试通过，首次下载依赖并构建约 3 分 31 秒。三个阶段失败、队列饱和、素材规则与数据库写入故障在独立 `stage5fault` 临时数据库中执行，全部通过；该环境的完整命令模式见 [CI integration job](../../.github/workflows/ci.yml)。
+
+| 验收项 | 实际证据 |
+| --- | --- |
+| A01 | `tests/task-integration.mjs` 观察三个阶段按序进入并成功。 |
+| A02 | `tests/task-scenarios.mjs` 分别观察三个阶段失败及后续阶段不执行。 |
+| A03 | `tests/task-integration.mjs` 验证结果可访问及后续查询仍为成功；失败终态由 `tests/task-scenarios.mjs` 验证。 |
+| A04 | `tests/asset-integration.mjs`、`tests/task-integration.mjs`、`tests/history-integration.mjs` 验证素材、任务、历史的用户隔离及输入校验。 |
+| A05 | `tests/task-scenarios.mjs` 验证队列满时 503 及持久化失败状态；`tests/task-rejection-write-failure.mjs` 检验失败状态写入异常。 |
+| A06 | `frontend/src/components/task-history.test.tsx` 验证两项任务交错返回时结果不串扰。 |
+| A07 | `frontend/src/components/task-history.test.tsx` 和 `asset-uploader.test.tsx` 验证查询失败保留运行状态并恢复。 |
+| A08 | 上述前端测试验证终态停止轮询、用户切换和请求取消；使用真实计时器。 |
+| A09 | CI 配置包含前端、后端和集成工作流；基线 `264e1ae` 的 [GitHub Actions 运行](https://github.com/yysk6/image-resource/actions/runs/41288936988) 已通过。 |
+
+浏览器手工检查：桌面历史页、Tab/Enter 打开历史页及焦点可见、模板详情上传标签和禁用提交状态；375 像素宽详情页截图检查；阶段 4 已检查切换用户和刷新历史。完整键盘遍历、浏览器手动断网恢复、并发任务期间的刷新与网络面板记录未执行，对应状态与恢复由组件和接口测试覆盖。未实施生产部署、备份恢复演练，未记录准确实际工时。服务重启后未完成任务不会自动恢复执行。
