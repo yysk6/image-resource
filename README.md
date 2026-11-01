@@ -66,7 +66,7 @@ Flyway V2 初始化两个演示用户和四个模板，包含两个分类、单�
 
 本地演示：复制 `.env.example` 为 `.env`，修改 `SIMULATION_MATERIAL_DELAY_MS`、`SIMULATION_GENERATE_DELAY_MS`、`SIMULATION_FINALIZE_DELAY_MS`（毫秒）控制每步耗时；`SIMULATION_FAIL_STAGE` 可设置为 `none`、`material-check`、`generate` 或 `finalize`。修改配置后执行 `docker compose up -d backend` 重建该容器，再提交新任务；这些配置作用于服务端，不需修改模板。`TASK_EXECUTOR_THREADS` 和 `TASK_EXECUTOR_QUEUE_CAPACITY` 分别设置工作线程数及有界队列容量。
 
-任务记录在事务提交后交给 Java 内存线程池，浏览器关闭不会取消任务。服务进程崩溃或重启时未完成任务可能停留在 `PENDING` 或 `RUNNING`，当前不自动恢复；可按任务 ID 查询数据库中的状态并人工排查，必要时由管理员备份后处理。提交请求超时后重试可能产生重复任务，本阶段未实现幂等；刷新或离开详情页后，当前页面中的任务卡片不会恢复，个人历史查询将在阶段 4 实现。
+任务记录在事务提交后交给 Java 内存线程池，浏览器关闭不会取消任务。服务进程崩溃或重启时未完成任务可能停留在 `PENDING` 或 `RUNNING`，当前不自动恢复；如果数据库持续不可用，失败状态也可能无法保存，日志会记录任务 ID 以便排查。可按任务 ID 查询数据库中的状态并人工排查，必要时由管理员备份后处理。提交请求超时后重试可能产生重复任务，本阶段未实现幂等；刷新或离开详情页后，当前页面中的任务卡片不会恢复，个人历史查询将在阶段 4 实现。
 
 阶段 3 的成功路径测试可在独立 Compose 环境启动后运行 `tests/task-integration.mjs`，失败阶段和队列饱和测试使用 `tests/task-scenarios-compose.yaml` 与 `tests/task-scenarios.mjs`；具体 Docker 命令见 [阶段 3 文档](docs/stages/03-tasks.md)。这些集成测试会写入演示数据，请在独立测试环境运行。
 

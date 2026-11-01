@@ -59,3 +59,7 @@ services:
       SIMULATION_MATERIAL_DELAY_MS: 5000
       TASK_EXECUTOR_THREADS: 1
       TASK_EXECUTOR_QUEUE_CAPACITY: 1
+  start-write-failure:
+    <<: *backend
+    environment:
+      <<: *env

@@ -26,4 +26,6 @@ public interface TaskMapper {
     int fail(@Param("id") String id, @Param("reason") String reason);
     @Update("UPDATE creation_task SET status='FAILED',failure_reason=#{reason},finished_at=UTC_TIMESTAMP(3),updated_at=UTC_TIMESTAMP(3) WHERE id=#{id} AND status='PENDING'")
     int reject(@Param("id") String id, @Param("reason") String reason);
+    @Update("UPDATE creation_task SET status='FAILED',failure_reason=#{reason},finished_at=UTC_TIMESTAMP(3),updated_at=UTC_TIMESTAMP(3) WHERE id=#{id} AND status IN ('PENDING','RUNNING')")
+    int failStart(@Param("id") String id, @Param("reason") String reason);
 }

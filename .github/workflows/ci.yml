@@ -60,6 +60,10 @@ jobs:
         run: docker compose -p taskscenarios -f tests/task-scenarios-compose.yaml exec -T db mysql -uroot -ptest_root_password -e "USE material_studio; CREATE TRIGGER reject_failed_status BEFORE UPDATE ON creation_task FOR EACH ROW SET NEW.status = IF(NEW.status = 'FAILED', NULL, NEW.status);"
       - name: Verify rejection write failure is reported
         run: docker run --rm --network taskscenarios_default -v "$PWD/tests:/tests:ro" node:22.14.0-bookworm-slim node /tests/task-rejection-write-failure.mjs
+      - name: Verify task start write failure is recorded
+        run: |
+          docker compose -p taskscenarios -f tests/task-scenarios-compose.yaml exec -T db mysql -uroot -ptest_root_password -e "USE material_studio; DROP TRIGGER reject_failed_status; CREATE TRIGGER reject_start_status BEFORE UPDATE ON creation_task FOR EACH ROW SET NEW.status = IF(NEW.status = 'RUNNING', NULL, NEW.status);"
+          docker run --rm --network taskscenarios_default -v "$PWD/tests:/tests:ro" node:22.14.0-bookworm-slim node /tests/task-start-write-failure.mjs
       - name: Stop test containers
         if: always()
         run: |
